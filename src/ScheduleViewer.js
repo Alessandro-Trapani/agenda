@@ -440,8 +440,6 @@ const ScheduleViewer = () => {
 
   return (
     <div className="schedule-container">
-      <h1 className="main-title">Planning</h1>
-
       <div className="date-selector">
         <input
           id="date-input"
