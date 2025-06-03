@@ -186,7 +186,7 @@ table tbody tr:hover {
 }
 
 .current-day td {
-  color: #1a1a1a !important;
+  color: #61de65;
 }
 
 @media (max-width: 768px) {
