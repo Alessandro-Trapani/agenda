@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { parse } from "papaparse";
 import "./style.css";
-
+import { useRef } from "react";
 const ScheduleViewer = () => {
   const [scheduleData, setScheduleData] = useState([]);
   const [todaySchedule, setTodaySchedule] = useState(null);
   const [currentDate, setCurrentDate] = useState(new Date());
-
-  const csvData = `"Dates,Formation Matin,Formateur Matin,Formation PM,Formateur PM,Salle,Tech,AT,Self,,,,,,,,
+  const todayRowRef = useRef(null);
+  const csvData = `Dates,Formation Matin,Formateur Matin,Formation PM,Formateur PM,Salle,Tech,AT,Self,,,,,,,,
 "Monday, June 2, 2025",,,,,,,,,,,,,,,,
 "Tuesday, June 3, 2025",Ouverture,Cathy,Dynamique de groupe,Laurence,1602,,0.5,,,,,,,,,
 "Wednesday, June 4, 2025",VmWare - découverte du matériel,Anthony Rizzello,Self Study,Stagiaires,1807/Extérieur,0.5,,0.5,,,,,,,,
@@ -267,141 +267,55 @@ const ScheduleViewer = () => {
 "Friday, February 13, 2026",Evaluation finale ,Cathy et Laurence,,,1602,,0.5,,,,,,,,,
 "Saturday, February 14, 2026",,,,,,,,,,,,,,,,
 "Sunday, February 15, 2026",,,,,,,,,,,,,,,,
-,,,,,,126.5,11,21.5,,,,,,,,
-`;
-
-  const parseFrenchDate = (dateString) => {
-    if (!dateString) {
-      return null;
-    }
-
-    let cleanedString = dateString.replace(/^[a-zA-ZÀ-ÿ]+,\s*/, "");
-    cleanedString = cleanedString.replace(/(\d+),/, "$1");
-
-    const monthMap = {
-      janvier: "January",
-      février: "February",
-      mars: "March",
-      avril: "April",
-      mai: "May",
-      juin: "June",
-      juillet: "July",
-      août: "August",
-      septembre: "September",
-      octobre: "October",
-      novembre: "November",
-      décembre: "December",
-    };
-
-    const parts = cleanedString.split(" ");
-    if (parts.length === 3) {
-      const monthNameFrench = parts[0].toLowerCase();
-      const day = parts[1];
-      const year = parts[2];
-      const month = monthMap[monthNameFrench];
-
-      if (!month) {
-        return null;
-      }
-
-      const standardDateString = `${month} ${day}, ${year}`;
-      const date = new Date(standardDateString);
-
-      if (isNaN(date.getTime())) {
-        return null;
-      }
-      return date;
-    } else {
-      const directParsedDate = new Date(dateString);
-      if (isNaN(directParsedDate.getTime())) {
-        return null;
-      }
-      return directParsedDate;
-    }
+,,,,,,126.5,11,21.5,,,,,,,,`;
+  // Parse French/English dates like "Tuesday, June 3, 2025"
+  const parseDate = (dateString) => {
+    if (!dateString) return null;
+    const cleaned = dateString.replace(/^[a-zA-ZÀ-ÿ]+,\s*/, "").trim();
+    const date = new Date(cleaned);
+    return isNaN(date) ? null : date;
   };
 
   useEffect(() => {
-    const parsedData = parse(csvData, {
+    const parsed = parse(csvData, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (header) => header.trim(),
+      transformHeader: (h) => h.trim(),
     }).data;
-    setScheduleData(parsedData);
+    setScheduleData(parsed);
   }, []);
 
   useEffect(() => {
-    if (scheduleData.length > 0) {
-      const todayFormatted = new Intl.DateTimeFormat("fr-FR", {
-        weekday: "long",
-        month: "long",
-        day: "2-digit",
-        year: "numeric",
-      })
-        .format(currentDate)
-        .replace(/\./g, "")
-        .replace(/(\w+),\s(\w+)/, (match, p1, p2) => `${p1}, ${p2}`)
-        .toLowerCase();
+    if (!scheduleData.length) return;
 
-      const todayEntry = scheduleData.find((entry) => {
-        if (!entry.Dates) return false;
-        const csvDate = parseFrenchDate(entry.Dates);
-        if (!csvDate || isNaN(csvDate.getTime())) {
-          return false;
-        }
-        const formattedCsvDate = new Intl.DateTimeFormat("fr-FR", {
-          weekday: "long",
-          month: "long",
-          day: "2-digit",
-          year: "numeric",
-        })
-          .format(csvDate)
-          .replace(/\./g, "")
-          .replace(/(\w+),\s(\w+)/, (match, p1, p2) => `${p1}, ${p2}`)
-          .toLowerCase();
+    const todayEntry = scheduleData.find((entry) => {
+      const entryDate = parseDate(entry.Dates);
+      return (
+        entryDate && entryDate.toDateString() === currentDate.toDateString()
+      );
+    });
 
-        return formattedCsvDate === todayFormatted;
-      });
-      setTodaySchedule(todayEntry || null);
-    }
+    setTodaySchedule(todayEntry || null);
   }, [scheduleData, currentDate]);
 
-  const getCurrentTimePeriod = () => {
+  const getCurrentPeriod = () => {
     const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
+    if (now.toDateString() !== currentDate.toDateString()) return "";
 
-    const isCurrentDate = currentDate.toDateString() === now.toDateString();
-
-    if (!isCurrentDate) return "";
-
-    if (currentHour > 8 || (currentHour === 8 && currentMinute >= 30)) {
-      if (currentHour < 12) {
-        return "Matin";
-      }
-    }
-
-    if (currentHour === 12) {
-      return "Pause";
-    }
-
-    if (currentHour > 13 || (currentHour === 13 && currentMinute >= 0)) {
-      if (currentHour < 17) {
-        return "Afternoon";
-      }
-    }
-
+    const hour = now.getHours();
+    if (hour >= 8 && hour < 12) return "Matin";
+    if (hour >= 12 && hour < 13) return "Pause";
+    if (hour >= 13 && hour < 17) return "PM";
     return "";
   };
 
-  const currentPeriod = getCurrentTimePeriod();
+  const currentPeriod = getCurrentPeriod();
 
-  const renderScheduleCard = (period) => {
+  const renderCard = (period) => {
     const formationKey =
       period === "Matin" ? "Formation Matin" : "Formation PM";
     const formateurKey =
       period === "Matin" ? "Formateur Matin" : "Formateur PM";
-    const salleKey = "Salle";
-
     const isHighlighted = currentPeriod === period;
     const isPause = period === "Pause";
 
@@ -429,8 +343,7 @@ const ScheduleViewer = () => {
               <strong>Formateur :</strong> {todaySchedule[formateurKey]}
             </p>
             <p>
-              <strong>Salle :</strong>{" "}
-              {todaySchedule[salleKey] || "Non spécifiée"}
+              <strong>Salle :</strong> {todaySchedule.Salle || "Non spécifiée"}
             </p>
           </>
         ) : (
@@ -444,35 +357,35 @@ const ScheduleViewer = () => {
     <div className="schedule-container">
       <div className="date-selector">
         <input
-          id="date-input"
           type="date"
           value={currentDate.toISOString().split("T")[0]}
           onChange={(e) => setCurrentDate(new Date(e.target.value))}
         />
+        <button
+          onClick={() => {
+            setCurrentDate(new Date());
+            setTimeout(() => {
+              todayRowRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+              });
+            }, 50);
+          }}
+          className="go-today-button"
+        >
+          Aujourd'hui
+        </button>
       </div>
 
       <div className="today-schedule-section">
         <h2 className="section-title">
           Planning du jour ({currentDate.toLocaleDateString("fr-FR")})
         </h2>
-
         {todaySchedule ? (
           <div className="time-periods">
-            {renderScheduleCard("Matin")}
-            {renderScheduleCard("Pause")}
-            {renderScheduleCard("Afternoon")}
-            <div className="additional-info">
-              <h3>Informations supplémentaires</h3>
-              <p>
-                <strong>Tech :</strong> {todaySchedule.Tech || "Non"}
-              </p>
-              <p>
-                <strong>AT :</strong> {todaySchedule.AT || "Non"}
-              </p>
-              <p>
-                <strong>Self :</strong> {todaySchedule.Self || "Non"}
-              </p>
-            </div>
+            {renderCard("Matin")}
+            {renderCard("Pause")}
+            {renderCard("PM")}
           </div>
         ) : (
           <p className="no-planning">Aucun planning trouvé pour cette date.</p>
@@ -497,27 +410,17 @@ const ScheduleViewer = () => {
               </tr>
             </thead>
             <tbody>
-              {scheduleData.map((row, index) => {
-                const rowDate = parseFrenchDate(row.Dates);
-
-                const rowDateFormatted = rowDate
-                  ? new Intl.DateTimeFormat("fr-FR", {
-                      year: "numeric",
-                      month: "2-digit",
-                      day: "2-digit",
-                    }).format(rowDate)
-                  : "";
-
-                const currentDateFormatted = new Intl.DateTimeFormat("fr-FR", {
-                  year: "numeric",
-                  month: "2-digit",
-                  day: "2-digit",
-                }).format(currentDate);
-
-                const isCurrentDay = rowDateFormatted === currentDateFormatted;
-
+              {scheduleData.map((row, idx) => {
+                const rowDate = parseDate(row.Dates);
+                const isToday =
+                  rowDate &&
+                  rowDate.toDateString() === currentDate.toDateString();
                 return (
-                  <tr key={index} className={isCurrentDay ? "current-day" : ""}>
+                  <tr
+                    key={idx}
+                    ref={isToday ? todayRowRef : null}
+                    className={isToday ? "current-day" : ""}
+                  >
                     <td>{row.Dates || "-"}</td>
                     <td>{row["Formation Matin"] || "-"}</td>
                     <td>{row["Formateur Matin"] || "-"}</td>
